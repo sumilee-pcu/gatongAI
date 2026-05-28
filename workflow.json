@@ -1,0 +1,186 @@
+{
+  "name": "가정통신문 AI 초안 자동생성",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyMinute" }]
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "list",
+          "cachedResultName": "설문지 응답 시트1"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "node-01",
+      "name": "폼 응답 감지",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "name": "Google Sheets Trigger OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "={{ [{parts:[{text:\"당신은 한국 초중학교 교사를 위한 가정통신문 작성 전문가입니다.\\n\\n제목: \" + $json[\"제목\"] + \"\\n학년/반: \" + $json[\"학년반\"] + \"\\n\\n다음 형식으로 가정통신문 초안을 작성해주세요:\\n1. 인사말\\n2. 안내 목적\\n3. 주요 내용\\n4. 협조 요청사항\\n5. 문의처\"}]}] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-02",
+      "name": "Gemini AI 초안 생성",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-01",
+              "name": "teacherEmail",
+              "value": "={{ $('폼 응답 감지').item.json['teacherEmail'] }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-02",
+              "name": "제목",
+              "value": "={{ $('폼 응답 감지').item.json['제목'] }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-03",
+              "name": "학년반",
+              "value": "={{ $('폼 응답 감지').item.json['학년반'] }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-04",
+              "name": "초안내용",
+              "value": "={{ $json.candidates[0].content.parts[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-05",
+              "name": "생성일시",
+              "value": "={{ new Date().toLocaleString('ko-KR') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-03",
+      "name": "초안 정리",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "가정통신문 요청 응답"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "초안검토"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "node-04",
+      "name": "초안 시트 저장",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [900, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json['teacherEmail'] }}",
+        "subject": "={{ '[가정통신문 초안] ' + $json['제목'] + ' (' + $json['학년반'] + ')' }}",
+        "emailType": "html",
+        "message": "={{ '<h2>가정통신문 AI 초안 완성</h2><p><b>제목:</b> ' + $json['제목'] + ' <br><b>학년/반:</b> ' + $json['학년반'] + ' <br><b>생성:</b> ' + $json['생성일시'] + '</p><hr><div style=\"white-space:pre-wrap;background:#f5f5f5;padding:16px;border-radius:8px;\">' + $json['초안내용'] + '</div><hr><p style=\"color:#888;font-size:12px;\">이 초안은 Gemini AI가 자동 생성했습니다. 내용을 검토하고 필요한 부분을 수정하여 사용하세요.</p>' }}",
+        "options": {}
+      },
+      "id": "node-05",
+      "name": "검토 요청 이메일",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "폼 응답 감지": {
+      "main": [[{ "node": "Gemini AI 초안 생성", "type": "main", "index": 0 }]]
+    },
+    "Gemini AI 초안 생성": {
+      "main": [[{ "node": "초안 정리", "type": "main", "index": 0 }]]
+    },
+    "초안 정리": {
+      "main": [[{ "node": "초안 시트 저장", "type": "main", "index": 0 }]]
+    },
+    "초안 시트 저장": {
+      "main": [[{ "node": "검토 요청 이메일", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "instanceId": "n8n-gatong-ai"
+  },
+  "pinData": {}
+}
